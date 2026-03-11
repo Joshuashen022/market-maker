@@ -1,0 +1,36 @@
+[
+  {
+    "rpcUrl": "https://eth-sepolia.api.onfinality.io/public",
+    "poolAddress": "0xc7948fC7Aba1b56AdC035e1ae53816cD47dd33c7",
+    "poolFee": "500",
+    "token0Info": {
+      "address": "0x11ae382abBC595CF801eAc09cd1818956341c61d",
+      "symbol": "GMB",
+      "name": "GMHKong",
+      "decimals": "18"
+    },
+    "token1Info": {
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "decimals": "18"
+    }
+  },
+  {
+    "rpcUrl": "https://eth-sepolia.api.onfinality.io/public",
+    "poolAddress": "0x614dED58306b844ab755A5A81C3303c07a6D164F",
+    "poolFee": "500",
+    "token0Info": {
+      "address": "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06",
+      "symbol": "USDT",
+      "name": "Test Tether USD",
+      "decimals": "6"
+    },
+    "token1Info": {
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "decimals": "18"
+    }
+  }
+]
