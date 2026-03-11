@@ -81,7 +81,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
 
 export type IntervalWeights = Array<{ minSec: number; maxSec: number; weight: number }>;
 
-export type AmountUsdWeights = Array<{ minUsd: number; maxUsd: number; weight: number }>;
+export type AmountERC20Weights = Array<{ min: number; max: number; weight: number }>;
 
 export type BotRuntimeConfig = {
     /** rpc url */
@@ -98,7 +98,7 @@ export type BotRuntimeConfig = {
   /** interval distribution (seconds) */
   intervals: IntervalWeights;
   /** per-trade notional distribution in USD */
-  amountUsd: AmountUsdWeights;
+  amountERC20: AmountERC20Weights;
   /** anchor settings */
   anchorWindowSec: number;
   anchorUpdateSec: number;
@@ -132,9 +132,9 @@ export function defaultConfig(): BotRuntimeConfig {
         { minSec: 300, maxSec: 600, weight: 50 },
         { minSec: 600, maxSec: 1200, weight: 20 },
       ],
-      amountUsd: [
-        { minUsd: 2, maxUsd: 50, weight: 90 },
-        { minUsd: 50, maxUsd: 100, weight: 10 },
+      amountERC20: [
+        { min: 1, max: 25, weight: 90 },
+        { min: 25, max: 100, weight: 10 },
       ],
       anchorWindowSec: 30 * 60,
       anchorUpdateSec: 2 * 60,

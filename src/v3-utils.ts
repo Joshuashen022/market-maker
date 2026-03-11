@@ -1,4 +1,5 @@
 import { Contract, JsonRpcProvider } from "ethers";
+import { Decimal } from "decimal.js";
 
 const V3_POOL_ABI = [
   "function token0() view returns (address)",
@@ -65,3 +66,32 @@ export async function getTokenBasicInfo(
   };
 }
 
+
+
+export function calculatePrices(
+  sqrtPriceX96: string | bigint,
+  decimal0: number,
+  decimal1: number
+) {
+  const q96 = new Decimal(2).pow(96);
+  const sqrtPrice = new Decimal(sqrtPriceX96.toString());
+
+  // 1. 计算核心价格 P = (sqrtPrice / 2^96) ^ 2
+  // 这代表了 1 份最小单位(wei)的 token0 等于多少份最小单位的 token1
+  const priceRaw = sqrtPrice.div(q96).pow(2);
+
+  // 2. 调整精度差异
+  // 公式: P_human = P_raw * (10^decimal0 / 10^decimal1)
+  const scalar = new Decimal(10).pow(decimal0).div(new Decimal(10).pow(decimal1));
+  
+  const price0 = priceRaw.mul(scalar); // 1 Token0 = X Token1
+  const price1 = new Decimal(1).div(price0); // 1 Token1 = Y Token0
+
+  return {
+    token1PerToken0: price0.toString(),
+    token0PerToken1: price1.toString(),
+    // 转换为更易读的数字格式 (可选)
+    token1PerToken0Fixed: price0.toFixed(6),
+    token0PerToken1Fixed: price1.toFixed(18),
+  };
+}

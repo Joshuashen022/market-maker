@@ -84,8 +84,8 @@ export function formatRational(
 
 export type SwapArgs = {
   poolIndex: number;
-  /** true = token0 -> token1, false = token1 -> token0 */
-  sellToken0: boolean;
+  /** true = token1 -> token0  false = token0 -> token1, */
+  isBuy: boolean;
   amountIn: bigint;
   amountOutMinimum: bigint;
   deadline?: number | null;
@@ -167,7 +167,7 @@ export class PoolManager {
   async swap(args: SwapArgs, wallet: Wallet): Promise<SwapResult> {
     const {
       poolIndex,
-      sellToken0,
+      isBuy,
       amountIn,
       amountOutMinimum,
       deadline = null,
@@ -178,15 +178,13 @@ export class PoolManager {
     const rpcUrl = cfg.rpcUrl;
     const poolAddress = cfg.poolAddress;
     const fee = Number(cfg.poolFee);
-    const swapRouterAddress = cfg.poolAddress;
+    const swapRouterAddress = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E";
     const routerHasDeadlineFinal = deadline !== null;
 
-  
-
-    const tokenInAddr = sellToken0 ? cfg.token0Info.address : cfg.token1Info.address;
-    const tokenOutAddr = sellToken0 ? cfg.token1Info.address : cfg.token0Info.address;
-    const symIn = sellToken0 ? cfg.token0Info.symbol : cfg.token1Info.symbol;
-    const symOut = sellToken0 ? cfg.token1Info.symbol : cfg.token0Info.symbol;
+    const tokenInAddr = isBuy ? cfg.token1Info.address : cfg.token0Info.address;
+    const tokenOutAddr = isBuy ? cfg.token0Info.address : cfg.token1Info.address;
+    const symIn = isBuy ? cfg.token1Info.symbol : cfg.token0Info.symbol;
+    const symOut = isBuy ? cfg.token0Info.symbol : cfg.token1Info.symbol;
 
     const tokenIn = new Contract(tokenInAddr, ERC20_ABI, wallet);
     const router = new Contract(
@@ -211,7 +209,7 @@ export class PoolManager {
 
     if (bal < amountIn) {
       throw new Error(
-        `Insufficient ${symIn} balance. Have=${bal.toString()} (raw), need=${amountIn.toString()} (raw).`,
+        `Insufficient ${symIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
       );
     }
 
@@ -246,7 +244,7 @@ export class PoolManager {
           sqrtPriceLimitX96,
         };
 
-    const txSwap = await router.exactInputSingle(params);
+    const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
     console.log("swap tx:", txSwap.hash);
     const receipt = await txSwap.wait();
     console.log("status:", receipt?.status ?? "unknown");

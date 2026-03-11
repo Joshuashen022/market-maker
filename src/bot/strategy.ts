@@ -8,8 +8,7 @@ export type StrategyParams = {
   buyPct: number;
   maxConsecutive: number;
 
-  // USD buckets for amount selection
-  usdBuckets: { min: number; max: number; weight: number }[];
+  amountERC20Buckets: { min: number; max: number; weight: number }[];
 
   // interval buckets (seconds)
   intervalBuckets: { min: number; max: number; weight: number }[];
@@ -32,8 +31,7 @@ export type MarketContext = {
 
 export type TradeDecision = {
   side: Side;
-  usdAmount: number;
-  ethAmount: number;
+  amountERC20: number;
   slippage: number;
   nextDelaySec: number;
 };
@@ -50,9 +48,9 @@ export class StrategyState {
     this.strategyParams = {
       buyPct: total > 0 ? buyWeight / total : 0.5,
       maxConsecutive: cfg.maxConsecutiveSameSide,
-      usdBuckets: [
-        { min: cfg.amountUsd[0].minUsd, max: cfg.amountUsd[0].maxUsd, weight: cfg.amountUsd[0].weight },
-        { min: cfg.amountUsd[1].minUsd, max: cfg.amountUsd[1].maxUsd, weight: cfg.amountUsd[1].weight }
+      amountERC20Buckets: [
+        { min: cfg.amountERC20[0].min, max: cfg.amountERC20[0].max, weight: cfg.amountERC20[0].weight },
+        { min: cfg.amountERC20[1].min, max: cfg.amountERC20[1].max, weight: cfg.amountERC20[1].weight }
       ],
       intervalBuckets: [
           { min: cfg.intervals[0].minSec, max: cfg.intervals[0].maxSec, weight: cfg.intervals[0].weight },
@@ -67,7 +65,7 @@ export class StrategyState {
     };
   }
 
-  decide(mkt: MarketContext, ethUsd: number): TradeDecision {
+  decide(mkt: MarketContext): TradeDecision {
     const forcedSide = this.forcedSide(mkt);
     let side: Side = forcedSide ?? (Math.random() < this.strategyParams.buyPct ? "BUY" : "SELL");
 
@@ -76,8 +74,8 @@ export class StrategyState {
       side = side === "BUY" ? "SELL" : "BUY";
     }
 
-    const usdAmount = this.pickUsdAmount();
-    const ethAmount = usdAmount / ethUsd;
+    // const usdAmount = this.pickUsdAmount();
+    const amountERC20 = this.pickAmountERC20();
     const slippage = this.pickSlippage(side);
     const nextDelaySec = this.pickDelay();
 
@@ -88,7 +86,7 @@ export class StrategyState {
       this.runLen = 1;
     }
 
-    return { side, usdAmount, ethAmount, slippage, nextDelaySec };
+    return { side, amountERC20, slippage, nextDelaySec };
   }
 
   private forcedSide(mkt: MarketContext): Side | null {
@@ -99,9 +97,9 @@ export class StrategyState {
     return null;
   }
 
-  private pickUsdAmount(): number {
+  private pickAmountERC20(): number {
     const bucket = pickWeighted(
-      this.strategyParams.usdBuckets.map((b) => ({ weight: b.weight, value: b }))
+      this.strategyParams.amountERC20Buckets.map((b) => ({ weight: b.weight, value: b }))
     );
     return randFloat(bucket.min, bucket.max);
   }

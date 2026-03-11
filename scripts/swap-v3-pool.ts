@@ -15,7 +15,7 @@ export type SwapV3PoolExactInputSingleArgs = {
   /** Index into the pool list in pool-config.json */
   poolIndex: number;
   /** true = token0 -> token1, false = token1 -> token0 */
-  sellToken0: boolean;
+  isBuy: boolean;
   amountIn: bigint;
   amountOutMinimum: bigint;
   deadline?: number | null;
@@ -33,7 +33,7 @@ export async function swapV3PoolExactInputSingle(
   const wallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(process.env.RPC_URL!));
   return pm.swap({
     poolIndex: args.poolIndex,
-    sellToken0: args.sellToken0,
+    isBuy: args.isBuy,
     amountIn: args.amountIn,
     amountOutMinimum: args.amountOutMinimum,
     deadline: args.deadline ?? null,
@@ -46,17 +46,15 @@ async function main() {
   const pool = pm.getPool(0);
 
   const amountInHuman = "0.0000001";
-  // isBuy = true => pay token1 (e.g. WETH), receive token0 (e.g. GMB) => sellToken0 = false
   const isBuy = true;
-  const sellToken0 = !isBuy;
 
-  const tokenInInfo = sellToken0 ? pool.token0Info : pool.token1Info;
+  const tokenInInfo = isBuy ? pool.token1Info : pool.token0Info;
   const decIn = Number(tokenInInfo.decimals);
   const amountIn = parseUnits(amountInHuman, decIn);
 
   await swapV3PoolExactInputSingle({
     poolIndex: 0,
-    sellToken0,
+    isBuy,
     amountIn,
     amountOutMinimum: 0n,
     deadline: null,

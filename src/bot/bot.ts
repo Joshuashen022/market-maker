@@ -4,7 +4,7 @@ import { PoolManager, PoolPriceResult, formatRational } from "../pool-manager.js
 import { defaultConfig, loadConfig } from "./config.js";
 import { AnchorPrice, type PriceSample } from "./anchor.js";
 import { StrategyState } from "./strategy.js";
-import { WalletRotator } from "./wallet-rotator.js";
+import { calculatePrices } from "../v3-utils.js";
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -34,23 +34,14 @@ function isEthToken(t: { symbol: string; name: string }): boolean {
 }
 
 /** Build PriceSample from pool prices. priceTokenPerEth = TOKEN per 1 ETH. */
-function priceResultToSample(
-  erc20EthPrice: PoolPriceResult,
-  ethUsdtPrice: PoolPriceResult
-): PriceSample {
+function priceResultToSample(erc20EthPrice: PoolPriceResult): PriceSample {
   // Pool 0: ERC20 <-> ETH. We want "non-ETH token per 1 ETH".
-  const erc20EthEthIsToken0 = isEthToken(erc20EthPrice.token0);
-  const priceTokenPerEth = erc20EthEthIsToken0
-    ? parseFloat(formatRational(erc20EthPrice.num1Per0, erc20EthPrice.den1Per0, 18))
-    : parseFloat(formatRational(erc20EthPrice.num0Per1, erc20EthPrice.den0Per1, 18));
-
+  const priceTokenPerEth = calculatePrices(erc20EthPrice.sqrtPriceX96.toString(), Number(erc20EthPrice.token0.decimals), Number(erc20EthPrice.token1.decimals)).token0PerToken1;
+  console.log("priceTokenPerEth", priceTokenPerEth);
   // Pool 1: ETH <-> USDT (or other USD stable). We want USD per 1 ETH.
-  const ethUsdtEthIsToken0 = isEthToken(ethUsdtPrice.token0);
-  const ethUsd = ethUsdtEthIsToken0
-    ? parseFloat(formatRational(ethUsdtPrice.num1Per0, ethUsdtPrice.den1Per0, 18))
-    : parseFloat(formatRational(ethUsdtPrice.num0Per1, ethUsdtPrice.den0Per1, 18));
-
-  return { t: nowSec(), priceTokenPerEth, ethUsd };
+  // const ethUsd = calculatePrices(ethUsdtPrice.sqrtPriceX96.toString(), Number(ethUsdtPrice.token0.decimals), Number(ethUsdtPrice.token1.decimals)).token0PerToken1;
+  // console.log("ethUsd", ethUsd);
+  return { t: nowSec(), priceTokenPerEth: Number(priceTokenPerEth)};
 }
 
 
@@ -64,15 +55,13 @@ export async function runBot() {
   while (true) {
     // update anchor (read price from pool via PoolManager.getPrice)
     const erc20EthPrice = await poolManager.getPrice(0);
-    const ethUsdtPrice = await poolManager.getPrice(1);
-    const sample = priceResultToSample(erc20EthPrice, ethUsdtPrice);
+    const sample = priceResultToSample(erc20EthPrice);
     console.log("sample", sample);
     anchor.add(sample);
     const twap = anchor.twap(sample.t);
 
     const decision = strat.decide(
-      { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: twap },
-      sample.ethUsd
+      { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: twap }
     );
     console.log("decision", decision);
     // const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
@@ -81,7 +70,8 @@ export async function runBot() {
     // const chosenWallet = w.wallet;
     const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
 
-    const amountInEth = decision.ethAmount;
+    const amountInERC20 = decision.amountERC20;
+    const amountInEth = amountInERC20 / sample.priceTokenPerEth;
 
     // Very rough minOut estimation using spot priceTokenPerEth (ignores pool price impact/fee).
     // BUY: out is TOKEN ~= ethIn * (token/eth) * (1-slippage)
@@ -101,15 +91,15 @@ export async function runBot() {
       console.log(
         `[trade][BUY] wallet=${chosenWallet.address} ethIn=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
           2
-        )}% outMin ${outMin} twap=${twap?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
+        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} twap=${twap?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
       );
 
-      // await poolManager.swap({
-      //   poolIndex: 0,
-      //   sellToken0: isBuy,
-      //   amountIn,
-      //   amountOutMinimum: outMin
-      // }, chosenWallet);
+      await poolManager.swap({
+        poolIndex: 0,
+        isBuy,
+        amountIn,
+        amountOutMinimum: outMin
+      }, chosenWallet);
       
     } else {
       // SELL: TOKEN -> ETH.
@@ -120,18 +110,18 @@ export async function runBot() {
       const outMin = parseEther(outEthMinFloat.toFixed(18));
 
       console.log(
-        `[trade][SELL] wallet=${chosenWallet.address} tokenIn≈${tokenInFloat.toFixed(6)} tokenIn=${tokenIn} ethOutMin=${outEthMinFloat.toFixed(
+        `[trade][SELL] wallet=${chosenWallet.address} amountInEth=${amountInEth} tokenIn≈${tokenInFloat.toFixed(6)} tokenIn=${tokenIn} ethOutMin=${outEthMinFloat.toFixed(
           6
         )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} twap=${twap?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(
           6
         )} delay=${decision.nextDelaySec}s`
       );
-      // await poolManager.swap({
-      //   poolIndex: 0,
-      //   sellToken0: isBuy,
-      //   amountIn: tokenIn,
-      //   amountOutMinimum: outMin,
-      // }, chosenWallet);
+      await poolManager.swap({
+        poolIndex: 0,
+        isBuy,
+        amountIn: tokenIn,
+        amountOutMinimum: outMin,
+      }, chosenWallet);
     }
 
     await sleep(decision.nextDelaySec * 1000);

@@ -1,7 +1,6 @@
 export type PriceSample = {
     t: number; // unix seconds
     priceTokenPerEth: number; // TOKEN per 1 ETH (spot)
-    ethUsd: number;
 };
 
 export class AnchorPrice {
