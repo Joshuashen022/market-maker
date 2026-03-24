@@ -69,8 +69,8 @@ export async function runBot(log: Log) {
     const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
     const w = walletRotator.pickRandom();
     walletRotator.markUsed(w);
-    // const chosenWallet = w.wallet;
-    const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
+    const chosenWallet = w.wallet;
+    // const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
 
     const amountInERC20 = decision.amountERC20;
     const amountInEth = amountInERC20 / sample.priceTokenPerEth;
