@@ -223,10 +223,11 @@ export class PoolManager {
         await txDeposit.wait();
         const newBal = await weth.balanceOf(wallet.address);
         console.log("new weth balance:", newBal.toString());
+      } else {
+        throw new Error(
+          `Insufficient ${symIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
+        );
       }
-      throw new Error(
-        `Insufficient ${symIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
-      );
     }
 
     if (allowance < amountIn) {
