@@ -5,6 +5,9 @@ import { defaultConfig, loadConfig } from "./config.js";
 import { AnchorPrice, type PriceSample } from "./anchor.js";
 import { StrategyState } from "./strategy.js";
 import { calculatePrices } from "../v3-utils.js";
+import { WalletRotator } from "./wallet-rotator.js";
+const DRY_RUN = process.env.DRY_RUN || false;
+
 function nowSec(): number {
   return Math.floor(Date.now() / 1000);
 }
@@ -56,17 +59,15 @@ export async function runBot() {
     // update anchor (read price from pool via PoolManager.getPrice)
     const erc20EthPrice = await poolManager.getPrice(0);
     const sample = priceResultToSample(erc20EthPrice);
-    console.log("sample", sample);
-    anchor.add(sample);
-    const twap = anchor.twap(sample.t);
+    const price = sample.priceTokenPerEth;
 
     const decision = strat.decide(
-      { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: twap }
+      { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: price }
     );
-    console.log("decision", decision);
-    // const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
-    // const w = walletRotator.pickRandom();
-    // walletRotator.markUsed(w);
+
+    const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
+    const w = walletRotator.pickRandom();
+    walletRotator.markUsed(w);
     // const chosenWallet = w.wallet;
     const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
 
@@ -91,16 +92,18 @@ export async function runBot() {
       console.log(
         `[trade][BUY] wallet=${chosenWallet.address} ethIn=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
           2
-        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} twap=${twap?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
+        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
       );
 
-      await poolManager.swap({
-        poolIndex: 0,
-        isBuy,
-        amountIn,
-        amountOutMinimum: outMin
-      }, chosenWallet);
-      
+      if (!DRY_RUN) {
+        await poolManager.swap({
+          poolIndex: 0,
+          isBuy,
+          amountIn,
+          amountOutMinimum: outMin
+        }, chosenWallet);
+      }
+
     } else {
       // SELL: TOKEN -> ETH.
       const tokenInFloat = amountInEth * spot;
@@ -112,19 +115,27 @@ export async function runBot() {
       console.log(
         `[trade][SELL] wallet=${chosenWallet.address} amountInEth=${amountInEth} tokenIn≈${tokenInFloat.toFixed(6)} tokenIn=${tokenIn} ethOutMin=${outEthMinFloat.toFixed(
           6
-        )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} twap=${twap?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(
+        )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(
           6
         )} delay=${decision.nextDelaySec}s`
       );
+
+      if (!DRY_RUN) {
       await poolManager.swap({
         poolIndex: 0,
         isBuy,
         amountIn: tokenIn,
-        amountOutMinimum: outMin,
-      }, chosenWallet);
+          amountOutMinimum: outMin,
+        }, chosenWallet);
+      }
+
     }
 
-    await sleep(decision.nextDelaySec * 1000);
+    if (DRY_RUN) {
+      await sleep(1000);
+    } else {
+      await sleep(decision.nextDelaySec * 1000);
+    }
   }
 }
 
