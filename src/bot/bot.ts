@@ -61,8 +61,8 @@ export async function runBot(log: Log) {
     const erc20EthPrice = await poolManager.getPrice(0);
     const sample = priceResultToSample(erc20EthPrice, log);
     anchor.add(sample);
-    const price = anchor.twap(sample.t);
-    if (!price) throw new Error("No price from anchor");
+    let price = anchor.twap(nowSec());
+    if (!price) price = sample.priceTokenPerEth;
 
     const decision = strat.decide(
       { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: price }
