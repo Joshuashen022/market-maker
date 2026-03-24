@@ -53,6 +53,14 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
 ];
 
+const WETH_ABI = [
+  "function deposit() payable",
+  "function withdraw(uint256 amount) payable",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
+
 const SWAP_ROUTER_ABI_WITH_DEADLINE = [
   "function exactInputSingle(tuple(address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)",
 ];
@@ -208,6 +216,14 @@ export class PoolManager {
     console.log();
 
     if (bal < amountIn) {
+      if (isBuy){
+        const weth = new Contract(tokenInAddr, WETH_ABI, wallet);
+        const txDeposit = await weth.deposit({ value: amountIn });
+        console.log("deposit tx:", txDeposit.hash);
+        await txDeposit.wait();
+        const newBal = await weth.balanceOf(wallet.address);
+        console.log("new weth balance:", newBal.toString());
+      }
       throw new Error(
         `Insufficient ${symIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
       );
