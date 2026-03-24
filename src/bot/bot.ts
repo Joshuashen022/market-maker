@@ -96,14 +96,12 @@ export async function runBot(log: Log) {
         )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
       );
 
-      if (!DRY_RUN) {
         await poolManager.swap({
           poolIndex: 0,
           isBuy,
           amountIn,
           amountOutMinimum: outMin
         }, chosenWallet);
-      }
 
     } else {
       // SELL: TOKEN -> ETH.
@@ -121,14 +119,12 @@ export async function runBot(log: Log) {
         )} delay=${decision.nextDelaySec}s`
       );
 
-      if (!DRY_RUN) {
       await poolManager.swap({
         poolIndex: 0,
         isBuy,
         amountIn: tokenIn,
           amountOutMinimum: outMin,
         }, chosenWallet);
-      }
 
     }
 

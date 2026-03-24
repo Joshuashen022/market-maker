@@ -2,6 +2,7 @@ import { Contract, ethers, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
 import { readFileSync } from "fs";
 import path from "path";
 import "dotenv/config";
+const DRY_RUN = process.env.DRY_RUN || false;
 
 // --- Types (match pool-config.json) ---
 
@@ -261,12 +262,13 @@ export class PoolManager {
           amountOutMinimum,
           sqrtPriceLimitX96,
         };
-
-    const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
-    console.log("swap tx:", txSwap.hash);
-    const receipt = await txSwap.wait();
-    console.log("status:", receipt?.status ?? "unknown");
-
-    return { txSwap, receipt };
+    if (!DRY_RUN) {
+      const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
+      console.log("swap tx:", txSwap.hash);
+      const receipt = await txSwap.wait();
+      console.log("status:", receipt?.status ?? "unknown");
+      return { txSwap, receipt };
+    }
+    return { txSwap: { hash: "0x0000000000000000000000000000000000000000000000000000000000000000", wait: async () => ({ status: 1 }) }, receipt: undefined };
   }
 }
