@@ -9,16 +9,22 @@ type FileLogger = Log & {
   close: () => Promise<void>;
 };
 
+function formatUtcPlus8(date: Date, forFileName = false): string {
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const iso = shifted.toISOString();
+  return forFileName ? iso.replace(/[:.]/g, "-") : iso.replace("Z", "+08:00");
+}
+
 export function createFileLogger(prefix: string): FileLogger {
   const logsDir = path.resolve(process.cwd(), "logs");
   fs.mkdirSync(logsDir, { recursive: true });
 
-  const startedAt = new Date().toISOString().replace(/[:.]/g, "-");
+  const startedAt = formatUtcPlus8(new Date(), true);
   const filePath = path.join(logsDir, `${prefix}-${startedAt}.log`);
   const stream = fs.createWriteStream(filePath, { flags: "a" });
 
   const write = (level: string, args: unknown[]) => {
-    const timestamp = new Date().toISOString();
+    const timestamp = formatUtcPlus8(new Date());
     stream.write(`[${timestamp}] [${level}] ${util.format(...args)}\n`);
   };
 
