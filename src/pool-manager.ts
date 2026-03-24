@@ -1,4 +1,4 @@
-import { Contract, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
+import { Contract, ethers, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
 import { readFileSync } from "fs";
 import path from "path";
 import "dotenv/config";
@@ -218,7 +218,8 @@ export class PoolManager {
     if (bal < amountIn) {
       if (isBuy){
         const weth = new Contract(tokenInAddr, WETH_ABI, wallet);
-        const txDeposit = await weth.deposit({ value: amountIn });
+        const depositAmount = amountIn + ethers.parseEther("0.0001");
+        const txDeposit = await weth.deposit({ value: depositAmount });
         console.log("deposit tx:", txDeposit.hash);
         await txDeposit.wait();
         const newBal = await weth.balanceOf(wallet.address);
