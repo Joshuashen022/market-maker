@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PoolManager, formatRational } from "../src/pool-manager.js";
+import { PoolManager, formatRational } from "../src/bot/pool-manager.js";
 import { calculatePrices } from "../src/v3-utils.js";
 
 let poolManager: PoolManager | null = null;

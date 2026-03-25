@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { JsonRpcProvider, Wallet, parseEther, parseUnits } from "ethers";
-import { PoolManager, PoolPriceResult, formatRational } from "../pool-manager.js";
+import { PoolManager, PoolPriceResult, formatRational } from "./pool-manager.js";
 import { defaultConfig, loadConfig } from "./config.js";
 import { AnchorPrice, type PriceSample } from "./anchor.js";
 import { StrategyState } from "./strategy.js";
@@ -53,19 +53,17 @@ export async function runBot(log: Log) {
   const cfg = defaultConfig();
   const poolManager = PoolManager.load();
 
-  const anchor = new AnchorPrice(cfg.anchorWindowSec);
+  const anchor = new AnchorPrice(cfg, poolManager, log);
   const strat = new StrategyState(cfg);
 
   while (true) {
     // update anchor (read price from pool via PoolManager.getPrice)
     const erc20EthPrice = await poolManager.getPrice(0);
-    const sample = priceResultToSample(erc20EthPrice, log);
-    anchor.add(sample);
-    let price = anchor.twap(nowSec());
-    if (!price) price = sample.priceTokenPerEth;
+    const currentTime = nowSec();
+    const price = await anchor.twap(currentTime);
 
     const decision = strat.decide(
-      { nowSec: sample.t, spotTokenPerEth: sample.priceTokenPerEth, anchorTokenPerEth: price }
+      { nowSec: currentTime, spotTokenPerEth: price, anchorTokenPerEth: price }
     );
 
     const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
@@ -75,27 +73,21 @@ export async function runBot(log: Log) {
     // const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
 
     const amountInERC20 = decision.amountERC20;
-    const amountInEth = amountInERC20 / sample.priceTokenPerEth;
-
-    // Very rough minOut estimation using spot priceTokenPerEth (ignores pool price impact/fee).
-    // BUY: out is TOKEN ~= ethIn * (token/eth) * (1-slippage)
-    // SELL: in is TOKEN (needs TOKEN sizing), but our sizing is in ETH; we approximate tokenIn = eth * priceTokenPerEth.
-    const spot = sample.priceTokenPerEth;
-    if (!Number.isFinite(spot) || spot <= 0) throw new Error("Invalid spot priceTokenPerEth from pool");
+    const amountInEth = amountInERC20 / price;
 
     // const deadline = nowSec() + 120;
     const isBuy = decision.side === "BUY";
     if (isBuy) {
       const amountIn = parseEther(amountInEth.toFixed(18));
       // BUY: ETH -> TOKEN.
-      const outTokenFloat = amountInEth * spot * (1 - decision.slippage);
+      const outTokenFloat = amountInEth * price * (1 - decision.slippage);
       const tokenOut = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
       const outMin = toUnitsFloat(outTokenFloat, tokenOut.decimals);
 
       log.log(
         `[trade][BUY] wallet=${chosenWallet.address} ethIn=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
           2
-        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(6)} delay=${decision.nextDelaySec}s`
+        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} delay=${decision.nextDelaySec}s`
       );
 
         await poolManager.swap({
@@ -107,7 +99,7 @@ export async function runBot(log: Log) {
 
     } else {
       // SELL: TOKEN -> ETH.
-      const tokenInFloat = amountInEth * spot;
+      const tokenInFloat = amountInEth * price;
       const tokenInInfo = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
       const tokenIn = toUnitsFloat(tokenInFloat, tokenInInfo.decimals);
       const outEthMinFloat = amountInEth * (1 - decision.slippage);
@@ -116,9 +108,7 @@ export async function runBot(log: Log) {
       log.log(
         `[trade][SELL] wallet=${chosenWallet.address} amountInEth=${amountInEth} tokenIn≈${tokenInFloat.toFixed(6)} tokenIn=${tokenIn} ethOutMin=${outEthMinFloat.toFixed(
           6
-        )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} spot=${spot.toFixed(
-          6
-        )} delay=${decision.nextDelaySec}s`
+        )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} delay=${decision.nextDelaySec}s`
       );
 
       await poolManager.swap({
