@@ -2,6 +2,7 @@ import { Contract, ethers, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
 import { readFileSync } from "fs";
 import path from "path";
 import "dotenv/config";
+import type { Log } from "../logger.js";
 const DRY_RUN = process.env.DRY_RUN || false;
 
 // --- Types (match pool-config.json) ---
@@ -108,12 +109,13 @@ export type SwapResult = {
 
 export class PoolManager {
   readonly pools: PoolConfigItem[];
-
-  constructor(pools: PoolConfigItem[]) {
+  readonly log: Log;
+  constructor(pools: PoolConfigItem[], log: Log) {
     this.pools = pools;
+    this.log = log;
   }
 
-  static load(configPath?: string): PoolManager {
+  static load(log: Log, configPath?: string): PoolManager {
     const cfgPath =
       configPath ?? path.join(process.cwd(), "config", "pool-config.json");
     const raw = readFileSync(cfgPath, "utf8");
@@ -121,7 +123,7 @@ export class PoolManager {
     if (!Array.isArray(list) || list.length === 0) {
       throw new Error("pool-config.json must be a non-empty array of pool configs");
     }
-    return new PoolManager(list);
+    return new PoolManager(list, log);
   }
 
   getPool(index: number): PoolConfigItem {
@@ -206,15 +208,16 @@ export class PoolManager {
       tokenIn.balanceOf(wallet.address) as Promise<bigint>,
       tokenIn.allowance(wallet.address, swapRouterAddress) as Promise<bigint>,
     ]);
-
-    console.log("RPC:", rpcUrl);
-    console.log("Pool:", poolAddress);
-    console.log("SwapRouter:", swapRouterAddress);
-    console.log("Trader:", wallet.address);
-    console.log("Direction:", `${symIn} -> ${symOut}`, `(fee=${fee / 10_000}%)`);
-    console.log("AmountIn (raw):", amountIn.toString());
-    console.log("AmountOutMinimum (raw):", amountOutMinimum.toString());
-    console.log();
+    if (DRY_RUN) {
+      console.log("Dry run: RPC:", rpcUrl);
+      console.log("Dry run: Pool:", poolAddress);
+      console.log("Dry run: SwapRouter:", swapRouterAddress);
+      console.log("Trader:", wallet.address);
+      console.log("Dry run: Direction:", `${symIn} -> ${symOut}`, `(fee=${fee / 10_000}%)`);
+      console.log("Dry run: AmountIn (raw):", amountIn.toString());
+      console.log("Dry run: AmountOutMinimum (raw):", amountOutMinimum.toString());
+      console.log();
+    }
 
     if (bal < amountIn) {
       if (isBuy){
@@ -241,7 +244,6 @@ export class PoolManager {
 
     const deadlineFinal = deadline ?? Math.floor(Date.now() / 1000) + 20 * 60;
 
-    console.log("Swapping...");
     const params = routerHasDeadlineFinal
       ? {
           tokenIn: tokenInAddr,
@@ -262,6 +264,7 @@ export class PoolManager {
           amountOutMinimum,
           sqrtPriceLimitX96,
         };
+    this.log.log("Swapping...", params);
     if (!DRY_RUN) {
       const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
       console.log("swap tx:", txSwap.hash);

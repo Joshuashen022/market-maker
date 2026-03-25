@@ -2,6 +2,8 @@ import { PoolManager, PoolPriceResult } from "./pool-manager.js";
 import { calculatePrices } from "../v3-utils.js";
 import { BotRuntimeConfig } from "./config.js";
 import { Log } from "../logger.js";
+const DRY_RUN = process.env.DRY_RUN || false;
+
 export type PriceSample = {
     t: number; // unix seconds
     priceTokenPerEth: number; // TOKEN per 1 ETH (spot)
@@ -46,7 +48,14 @@ export class AnchorPrice {
       while (true) {        
         const sample = await this.getSample();
         this.add(sample);
-        await sleep(this.trackPriceIntervalSec * 1000);
+        if (DRY_RUN) {
+          await sleep(1000);
+          console.log("Dry run: tracked price", sample.priceTokenPerEth);
+        }
+        else {
+          await sleep(this.trackPriceIntervalSec * 1000);
+        }
+        
       }
     }
 
@@ -64,6 +73,9 @@ export class AnchorPrice {
     async twap(nowSec: number): Promise<number> {
       this.prune(nowSec);
       const defaultSample = await this.getSample();
+      if (DRY_RUN) {
+        console.log("Dry run: sample", this.samples.length);
+      }
       if (this.samples.length < 2) return defaultSample.priceTokenPerEth;
       let weighted = 0;
       let total = 0;
@@ -78,6 +90,9 @@ export class AnchorPrice {
       const dtTail = Math.max(0, nowSec - last.t);
       weighted += last.priceTokenPerEth * dtTail;
       total += dtTail;
+      if (DRY_RUN) {
+        console.log("Dry run: weighted", weighted, "total", total);
+      }
       if (total <= 0) return defaultSample.priceTokenPerEth;
       return weighted / total;
     }

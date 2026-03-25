@@ -51,7 +51,7 @@ function priceResultToSample(erc20EthPrice: PoolPriceResult, log: Log): PriceSam
 
 export async function runBot(log: Log) {
   const cfg = defaultConfig();
-  const poolManager = PoolManager.load();
+  const poolManager = PoolManager.load(log);
 
   const anchor = new AnchorPrice(cfg, poolManager, log);
   const strat = new StrategyState(cfg);
@@ -81,13 +81,13 @@ export async function runBot(log: Log) {
       const amountIn = parseEther(amountInEth.toFixed(18));
       // BUY: ETH -> TOKEN.
       const outTokenFloat = amountInEth * price * (1 - decision.slippage);
-      const tokenOut = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
-      const outMin = toUnitsFloat(outTokenFloat, tokenOut.decimals);
+      // const tokenOut = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
+      const outMin = toUnitsFloat(outTokenFloat, 18);
 
       log.log(
-        `[trade][BUY] wallet=${chosenWallet.address} ethIn=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
+        `[BUY] price=${price?.toFixed(6)} WETH amount=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
           2
-        )}% ERC20 amount:${outTokenFloat}, outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} delay=${decision.nextDelaySec}s`
+        )}% min GMB=${outTokenFloat} delay=${decision.nextDelaySec}s wallet=${chosenWallet.address} `
       );
 
         await poolManager.swap({
@@ -100,15 +100,15 @@ export async function runBot(log: Log) {
     } else {
       // SELL: TOKEN -> ETH.
       const tokenInFloat = amountInEth * price;
-      const tokenInInfo = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
-      const tokenIn = toUnitsFloat(tokenInFloat, tokenInInfo.decimals);
+      // const tokenInInfo = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
+      const tokenIn = toUnitsFloat(tokenInFloat, 18);
       const outEthMinFloat = amountInEth * (1 - decision.slippage);
       const outMin = parseEther(outEthMinFloat.toFixed(18));
 
       log.log(
-        `[trade][SELL] wallet=${chosenWallet.address} amountInEth=${amountInEth} tokenIn≈${tokenInFloat.toFixed(6)} tokenIn=${tokenIn} ethOutMin=${outEthMinFloat.toFixed(
-          6
-        )} slip=${(decision.slippage * 100).toFixed(2)}% outMin ${outMin} price=${price?.toFixed(6) ?? "n/a"} delay=${decision.nextDelaySec}s`
+        `[SELL] price=${price.toFixed(6)} GMB Amount≈${tokenInFloat.toFixed(2)} min ETH=${outEthMinFloat.toFixed(
+          4
+        )} slip=${(decision.slippage * 100).toFixed(2)}% delay=${decision.nextDelaySec}s wallet=${chosenWallet.address} `
       );
 
       await poolManager.swap({
