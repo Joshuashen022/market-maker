@@ -36,14 +36,15 @@ function loadPrivateKeysFromGeneratedFile(): string[] {
 export class WalletRotator {
   private readonly slots: WalletSlot[];
   private readonly maxConsecutive: number;
+  private provider: JsonRpcProvider;
 
-  constructor(rpcUrl: string, maxConsecutive: number) {
+  constructor(provider: JsonRpcProvider, maxConsecutive: number) {
     const privateKeys = loadPrivateKeysFromGeneratedFile();
     
     if (privateKeys.length === 0) throw new Error("WalletRotator: need at least 1 private key");
     if (maxConsecutive <= 0) throw new Error("WalletRotator: maxConsecutive must be > 0");
+    this.provider = provider;
     this.maxConsecutive = maxConsecutive;
-    const provider = new JsonRpcProvider(rpcUrl);
     this.slots = privateKeys.map((pk) => ({
       wallet: new Wallet(pk, provider),
       consecutiveTrades: 0,

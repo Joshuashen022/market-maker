@@ -67,6 +67,7 @@ export class StrategyState {
 
   decide(mkt: MarketContext): TradeDecision {
     const forcedSide = this.forcedSide(mkt);
+    // 买单 55% 卖单 45%
     let side: Side = forcedSide ?? (Math.random() < this.strategyParams.buyPct ? "BUY" : "SELL");
 
     // consecutive constraint: "< 5 笔" => enforce runLen < maxConsecutive

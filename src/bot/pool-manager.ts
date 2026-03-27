@@ -75,6 +75,26 @@ function pow10(n: number): bigint {
   return 10n ** BigInt(n);
 }
 
+async function retryUntilSuccess<T>(
+  operationName: string,
+  operation: () => Promise<T>,
+  retryDelayMs = 1_000,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    try {
+      return await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[PoolManager] ${operationName} failed on attempt ${attempt}, retrying in ${retryDelayMs}ms: ${message}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+}
+
 export function formatRational(
   numerator: bigint,
   denominator: bigint,
@@ -110,12 +130,14 @@ export type SwapResult = {
 export class PoolManager {
   readonly pools: PoolConfigItem[];
   readonly log: Log;
-  constructor(pools: PoolConfigItem[], log: Log) {
+  provider: JsonRpcProvider;
+  constructor(pools: PoolConfigItem[], log: Log, provider: JsonRpcProvider) {
     this.pools = pools;
     this.log = log;
+    this.provider = provider;
   }
 
-  static load(log: Log, configPath?: string): PoolManager {
+  static load(log: Log, provider: JsonRpcProvider, configPath?: string): PoolManager {
     const cfgPath =
       configPath ?? path.join(process.cwd(), "config", "pool-config.json");
     const raw = readFileSync(cfgPath, "utf8");
@@ -123,7 +145,7 @@ export class PoolManager {
     if (!Array.isArray(list) || list.length === 0) {
       throw new Error("pool-config.json must be a non-empty array of pool configs");
     }
-    return new PoolManager(list, log);
+    return new PoolManager(list, log, provider);
   }
 
   getPool(index: number): PoolConfigItem {
@@ -135,14 +157,17 @@ export class PoolManager {
   /** Get current price for a pool (logic from read-v3-price). */
   async getPrice(poolIndex: number): Promise<PoolPriceResult> {
     const cfg = this.getPool(poolIndex);
-    const provider = new JsonRpcProvider(cfg.rpcUrl);
-    const pool = new Contract(cfg.poolAddress, V3_POOL_ABI, provider);
+    const pool = new Contract(cfg.poolAddress, V3_POOL_ABI, this.provider);
 
     const [fee, slot0] = await Promise.all([
-      pool.fee() as Promise<number>,
-      pool.slot0() as Promise<
-        readonly [bigint, number, number, number, number, number, boolean]
-      >,
+      retryUntilSuccess("pool.fee()", () => pool.fee() as Promise<number>),
+      retryUntilSuccess(
+        "pool.slot0()",
+        () =>
+          pool.slot0() as Promise<
+            readonly [bigint, number, number, number, number, number, boolean]
+          >,
+      ),
     ]);
 
     const sqrtPriceX96 = slot0[0];
@@ -266,11 +291,16 @@ export class PoolManager {
         };
     this.log.log("Swapping...", params);
     if (!DRY_RUN) {
+      try {
       const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
-      console.log("swap tx:", txSwap.hash);
-      const receipt = await txSwap.wait();
-      console.log("status:", receipt?.status ?? "unknown");
-      return { txSwap, receipt };
+        console.log("swap tx:", txSwap.hash);
+        const receipt = await txSwap.wait();
+        console.log("status:", receipt?.status ?? "unknown");
+        return { txSwap, receipt };
+      } catch (error) {
+        console.error("swap failed:", error);
+        throw error;
+      }
     }
     return { txSwap: { hash: "0x0000000000000000000000000000000000000000000000000000000000000000", wait: async () => ({ status: 1 }) }, receipt: undefined };
   }

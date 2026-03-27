@@ -51,7 +51,8 @@ function priceResultToSample(erc20EthPrice: PoolPriceResult, log: Log): PriceSam
 
 export async function runBot(log: Log) {
   const cfg = defaultConfig();
-  const poolManager = PoolManager.load(log);
+  const provider = new JsonRpcProvider(cfg.rpcUrl);
+  const poolManager = PoolManager.load(log, provider);
 
   const anchor = new AnchorPrice(cfg, poolManager, log);
   const strat = new StrategyState(cfg);
@@ -66,11 +67,10 @@ export async function runBot(log: Log) {
       { nowSec: currentTime, spotTokenPerEth: price, anchorTokenPerEth: price }
     );
 
-    const walletRotator = new WalletRotator(cfg.rpcUrl, cfg.maxConsecutivePerWallet);
+    const walletRotator = new WalletRotator(provider, cfg.maxConsecutivePerWallet);
     const w = walletRotator.pickRandom();
     walletRotator.markUsed(w);
     const chosenWallet = w.wallet;
-    // const chosenWallet = new Wallet(process.env.PRIVATE_KEY!, new JsonRpcProvider(cfg.rpcUrl));
 
     const amountInERC20 = decision.amountERC20;
     const amountInEth = amountInERC20 / price;
