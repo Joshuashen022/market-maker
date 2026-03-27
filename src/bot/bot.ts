@@ -7,6 +7,7 @@ import { StrategyState } from "./strategy.js";
 import { calculatePrices } from "../v3-utils.js";
 import { WalletRotator } from "./wallet-rotator.js";
 import type { Log } from "../logger.js";
+import { getProvider } from "./get-provider.js";
 const DRY_RUN = process.env.DRY_RUN || false;
 
 function nowSec(): number {
@@ -51,7 +52,7 @@ function priceResultToSample(erc20EthPrice: PoolPriceResult, log: Log): PriceSam
 
 export async function runBot(log: Log) {
   const cfg = defaultConfig();
-  const provider = new JsonRpcProvider(cfg.rpcUrl);
+  const provider = getProvider(cfg.rpcUrl);
   const poolManager = PoolManager.load(log, provider);
 
   const anchor = new AnchorPrice(cfg, poolManager, log);

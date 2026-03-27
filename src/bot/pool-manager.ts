@@ -292,7 +292,7 @@ export class PoolManager {
     this.log.log("Swapping...", params);
     if (!DRY_RUN) {
       try {
-      const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
+        const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
         console.log("swap tx:", txSwap.hash);
         const receipt = await txSwap.wait();
         console.log("status:", receipt?.status ?? "unknown");
