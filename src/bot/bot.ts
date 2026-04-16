@@ -49,14 +49,25 @@ function priceResultToSample(erc20EthPrice: PoolPriceResult, log: Log): PriceSam
   return { t: nowSec(), priceTokenPerEth: Number(priceTokenPerEth)};
 }
 
+export type BotContext = {
+  cfg: ReturnType<typeof defaultConfig>;
+  provider: JsonRpcProvider;
+  poolManager: PoolManager;
+  anchor: AnchorPrice;
+  strat: StrategyState;
+};
 
-export async function runBot(log: Log) {
+export function initBot(log: Log): BotContext {
   const cfg = defaultConfig();
   const provider = getProvider(cfg.rpcUrl);
   const poolManager = PoolManager.load(log, provider);
-
   const anchor = new AnchorPrice(cfg, poolManager, log);
   const strat = new StrategyState(cfg);
+  return { cfg, provider, poolManager, anchor, strat };
+}
+
+export async function runBot(log: Log, ctx?: BotContext) {
+  const { cfg, provider, poolManager, anchor, strat } = ctx ?? initBot(log);
 
   while (true) {
     // update anchor (read price from pool via PoolManager.getPrice)

@@ -6,7 +6,10 @@
     "read-price": "tsx scripts/read-v3-price.ts",
     "swap": "tsx scripts/swap-v3-pool.ts",
     "bot": "tsx scripts/run-bot.ts",
-    "gen-keys": "tsx scripts/generate-keys.ts"
+    "api": "tsx scripts/run-api.ts",
+    "gen-keys": "tsx scripts/generate-keys.ts",
+    "increase-observation": "tsx scripts/increase-observation-cardinality.ts",
+    "plot-observations": "tsx scripts/plot-observations.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.6",
@@ -14,6 +17,7 @@
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.3",
     "@types/chai": "^5.2.3",
     "@types/chai-as-promised": "^8.0.2",
+    "@types/express": "^5.0.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.19.15",
     "chai": "^6.2.2",
@@ -26,6 +30,7 @@
     "typescript": "~5.8.0"
   },
   "dependencies": {
-    "decimal.js": "^10.6.0"
+    "decimal.js": "^10.6.0",
+    "express": "^5.1.0"
   }
 }

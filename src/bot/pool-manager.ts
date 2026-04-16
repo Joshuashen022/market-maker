@@ -2,6 +2,7 @@ import { Contract, ethers, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
 import { readFileSync } from "fs";
 import path from "path";
 import "dotenv/config";
+import { Decimal } from "decimal.js";
 import type { Log } from "../logger.js";
 const DRY_RUN = process.env.DRY_RUN || false;
 
@@ -39,12 +40,31 @@ export type PoolPriceResult = {
   den0Per1: bigint;
 };
 
+// --- TWAP result from getTwap24h() ---
+
+export type PoolTwapResult = {
+  poolAddress: string;
+  rpcUrl: string;
+  fee: number;
+  /** Arithmetic mean tick over the window. */
+  averageTick: number;
+  /** token1 per token0 TWAP, as a rational number */
+  num1Per0: bigint;
+  den1Per0: bigint;
+  /** token0 per token1 TWAP, as a rational number */
+  num0Per1: bigint;
+  den0Per1: bigint;
+  /** Window size in seconds (24h). */
+  windowSeconds: number;
+};
+
 // --- Swap args and result ---
 const V3_POOL_ABI = [
   "function token0() view returns (address)",
   "function token1() view returns (address)",
   "function fee() view returns (uint24)",
   "function slot0() view returns (uint160 sqrtPriceX96,int24 tick,uint16 observationIndex,uint16 observationCardinality,uint16 observationCardinalityNext,uint8 feeProtocol,bool unlocked)",
+  "function observe(uint32[] secondsAgos) view returns (int56[] tickCumulatives, uint160[] secondsPerLiquidityCumulativeX128s)",
 ];
 
 const ERC20_ABI = [
@@ -108,6 +128,31 @@ export function formatRational(
   const fracPart = (n % denominator) * fracScale / denominator;
   const fracStr = fracPart.toString().padStart(fractionalDigits, "0").replace(/0+$/, "");
   return fracStr.length ? `${sign}${intPart.toString()}.${fracStr}` : `${sign}${intPart.toString()}`;
+}
+
+function divTowardNegativeInfinity(a: bigint, b: bigint): bigint {
+  if (b === 0n) throw new Error("division by zero");
+  const q = a / b;
+  const r = a % b;
+  if (r === 0n) return q;
+  // JS bigint division truncates toward 0; adjust so it floors for negatives.
+  return (a < 0n) !== (b < 0n) ? q - 1n : q;
+}
+
+function decimalToScaledRational(
+  value: Decimal,
+  scaleDigits = 18,
+): { numerator: bigint; denominator: bigint } {
+  if (!value.isFinite()) throw new Error("TWAP price is not finite");
+  if (value.isNeg()) throw new Error("TWAP price is negative");
+  const scale = new Decimal(10).pow(scaleDigits);
+  // Round down to stay conservative (no overestimation).
+  const scaled = value.mul(scale).floor();
+  const asString = scaled.toFixed(0);
+  return {
+    numerator: BigInt(asString),
+    denominator: 10n ** BigInt(scaleDigits),
+  };
 }
 
 // --- PoolManager ---
@@ -196,6 +241,77 @@ export class PoolManager {
       den1Per0,
       num0Per1,
       den0Per1,
+    };
+  }
+ 
+  /**
+   * Calculate 24h TWAP using Uniswap V3 observations.
+   * Returns token1/token0 and token0/token1 TWAP as rationals.
+   */
+  async getTwap24h(poolIndex: number): Promise<PoolTwapResult> {
+    const windowSeconds = 24 * 60 * 60;
+    const cfg = this.getPool(poolIndex);
+    const pool = new Contract(cfg.poolAddress, V3_POOL_ABI, this.provider);
+
+    const [fee, observed] = await Promise.all([
+      retryUntilSuccess("pool.fee()", () => pool.fee() as Promise<number>),
+      retryUntilSuccess("pool.observe([24h,0])", () =>
+        pool.observe([windowSeconds, 0]) as Promise<
+          readonly [readonly bigint[], readonly bigint[]]
+        >,
+      ),
+    ]);
+
+    const tickCumulatives = observed[0];
+    if (!Array.isArray(tickCumulatives) || tickCumulatives.length < 2) {
+      throw new Error("pool.observe returned unexpected tickCumulatives");
+    }
+
+    const tickCumPast = BigInt(tickCumulatives[0] as unknown as bigint);
+    const tickCumNow = BigInt(tickCumulatives[1] as unknown as bigint);
+    const tickCumulativeDelta = tickCumNow - tickCumPast;
+
+    // Uniswap uses floor division for negative values to get a consistent mean tick.
+    const meanTickBig = divTowardNegativeInfinity(
+      tickCumulativeDelta,
+      BigInt(windowSeconds),
+    );
+    const averageTick = Number(meanTickBig);
+    if (!Number.isFinite(averageTick)) {
+      throw new Error("averageTick is not a finite number");
+    }
+    // Uniswap v3 tick bounds.
+    if (averageTick < -887272 || averageTick > 887272) {
+      throw new Error(`averageTick out of bounds: ${averageTick}`);
+    }
+
+    const dec0 = Number(cfg.token0Info.decimals);
+    const dec1 = Number(cfg.token1Info.decimals);
+
+    // price(token1/token0) in raw units is 1.0001^tick.
+    // Convert to human units by multiplying by 10^(dec0 - dec1).
+    const base = new Decimal("1.0001");
+    const price1Per0 = base.pow(averageTick).mul(
+      new Decimal(10).pow(dec0 - dec1),
+    );
+
+    const { numerator: num1Per0, denominator: den1Per0 } = decimalToScaledRational(
+      price1Per0,
+      18,
+    );
+    const num0Per1 = den1Per0;
+    const den0Per1 = num1Per0 === 0n ? 1n : num1Per0; // avoid 0 denom in formatting paths
+
+    return {
+      poolAddress: cfg.poolAddress,
+      rpcUrl: cfg.rpcUrl,
+      fee,
+      averageTick,
+      num1Per0,
+      den1Per0,
+      num0Per1,
+      den0Per1,
+      windowSeconds,
     };
   }
 

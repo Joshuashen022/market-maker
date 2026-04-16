@@ -1,12 +1,16 @@
 import "dotenv/config";
 import { PoolManager, formatRational } from "../src/bot/pool-manager.js";
 import { calculatePrices } from "../src/v3-utils.js";
+import { getProvider } from "../src/bot/get-provider.js";
+import { defaultConfig } from "../src/bot/config.js";
 
 let poolManager: PoolManager | null = null;
 
 function getPoolManager(): PoolManager {
   if (!poolManager) {
-    poolManager = PoolManager.load();
+    const cfg = defaultConfig();
+    const provider = getProvider(cfg.rpcUrl);
+    poolManager = PoolManager.load(console, provider);
   }
   return poolManager;
 }
@@ -52,6 +56,17 @@ async function main() {
   );
   console.log(
     `Price (token0 per token1): 1 ${t1.symbol || "token1"} = ${calculatedPrice.token0PerToken1} ${t0.symbol || "token0"}`,
+  );
+
+  const twap = await pm.getTwap24h(poolIndex);
+  console.log();
+  console.log(`TWAP window: ${twap.windowSeconds}s (${twap.windowSeconds / 3600}h)`);
+  console.log("TWAP averageTick:", twap.averageTick);
+  console.log(
+    `TWAP (token1 per token0): 1 ${t0.symbol || "token0"} = ${formatRational(twap.num1Per0, twap.den1Per0, 12)} ${t1.symbol || "token1"}`,
+  );
+  console.log(
+    `TWAP (token0 per token1): 1 ${t1.symbol || "token1"} = ${formatRational(twap.num0Per1, twap.den0Per1, 12)} ${t0.symbol || "token0"}`,
   );
 }
 
