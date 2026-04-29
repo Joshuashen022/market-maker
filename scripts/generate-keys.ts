@@ -12,7 +12,7 @@ const ERC20_ABI = [
 
 const COUNT = 30;
 const OUT_PATH = path.join(process.cwd(), "config", "generated-keys.json");
-const ERC20_ADDRESS = "0x11ae382abBC595CF801eAc09cd1818956341c61d";
+const ERC20_ADDRESS = "0x41ADB37fAcF253EedBf5c4c5Eb658F4DC676fc6D";
 function generateKeys() {
   const keys = Array.from({ length: COUNT }, () => {
     const w = Wallet.createRandom();
@@ -50,16 +50,16 @@ async function fundKeys() {
       console.log(`New ERC20 balance: ${ethers.formatUnits(newErc20Balance, 18)}`);
     }
 
-    if (ethBalance < ether_amount) {
-      console.log(`Transferring ${ether_amount - ethBalance} Ether to ${key.address}`);
-      const tx = await wallet.sendTransaction({
-        to: key.address,
-        value: ether_amount - ethBalance,
-      });
-      await tx.wait();
-      const newEthBalance = await provider.getBalance(key.address);
-      console.log(`New Ether balance: ${ethers.formatUnits(newEthBalance, 18)}`);
-    }
+    // if (ethBalance < ether_amount) {
+    //   console.log(`Transferring ${ether_amount - ethBalance} Ether to ${key.address}`);
+    //   const tx = await wallet.sendTransaction({
+    //     to: key.address,
+    //     value: ether_amount - ethBalance,
+    //   });
+    //   await tx.wait();
+    //   const newEthBalance = await provider.getBalance(key.address);
+    //   console.log(`New Ether balance: ${ethers.formatUnits(newEthBalance, 18)}`);
+    // }
   }
 }
 
@@ -81,7 +81,7 @@ async function checkKeys() {
 }
 
 function main() {
-  checkKeys();
+  fundKeys();
 }
 
 main();

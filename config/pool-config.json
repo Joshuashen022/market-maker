@@ -1,6 +1,23 @@
 [
   {
     "rpcUrl": "https://eth-sepolia.api.onfinality.io/public",
+    "poolAddress": "0x822fC2C49b2F4f60719DA214E44454d645f2C7d7",
+    "poolFee": "100",
+    "token0Info": {
+      "address": "0x41ADB37fAcF253EedBf5c4c5Eb658F4DC676fc6D",
+      "symbol": "xGMB",
+      "name": "xGMB",
+      "decimals": "18"
+    },
+    "token1Info": {
+      "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+      "symbol": "WETH",
+      "name": "Wrapped Ether",
+      "decimals": "18"
+    }
+  },
+  {
+    "rpcUrl": "https://eth-sepolia.api.onfinality.io/public",
     "poolAddress": "0xc7948fC7Aba1b56AdC035e1ae53816cD47dd33c7",
     "poolFee": "500",
     "token0Info": {

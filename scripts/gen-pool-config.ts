@@ -3,7 +3,7 @@ import path from "path";
 import "dotenv/config";
 import { getTokenBasicInfo, getV3PoolBasicInfo } from "../src/v3-utils.js";
 
-const DEFAULT_POOL = "0x614dED58306b844ab755A5A81C3303c07a6D164F";
+const DEFAULT_POOL = "0x822fC2C49b2F4f60719DA214E44454d645f2C7d7";
 const DEFAULT_RPC_URL = "https://eth-sepolia.api.onfinality.io/public";
 
 /**
