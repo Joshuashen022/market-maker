@@ -62,23 +62,23 @@ export function initBot(log: Log): BotContext {
   const provider = getProvider(cfg.rpcUrl);
   const poolManager = PoolManager.load(log, provider);
   const anchor = new AnchorPrice(cfg, poolManager, log);
+  anchor.trackPrice().catch((err) => {
+    log.error("AnchorPrice.trackPrice failed:", err);
+    throw err;
+  });
   const strat = new StrategyState(cfg);
   return { cfg, provider, poolManager, anchor, strat };
 }
 
-export async function runBot(log: Log, ctx?: BotContext) {
-  const { cfg, provider, poolManager, anchor, strat } = ctx ?? initBot(log);
+export async function runBot(log: Log, ctx: BotContext) {
+  const { cfg, provider, poolManager, anchor, strat } = ctx;
 
   while (true) {
-    // update anchor (read price from pool via PoolManager.getPrice)
-    const erc20EthPrice = await poolManager.getPrice(0);
     const currentTime = nowSec();
     const price = await anchor.twap(currentTime); // Token(0) amount per 1 wETH(1)
-
     const decision = strat.decide(
       { nowSec: currentTime, spotTokenPerEth: price, anchorTokenPerEth: price }
     );
-
     const walletRotator = new WalletRotator(provider, cfg.maxConsecutivePerWallet);
     const w = walletRotator.pickRandom();
     walletRotator.markUsed(w);

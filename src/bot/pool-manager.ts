@@ -1,4 +1,13 @@
-import { Contract, ethers, JsonRpcProvider, MaxUint256, Wallet } from "ethers";
+import {
+  Contract,
+  ethers,
+  JsonRpcProvider,
+  MaxUint256,
+  Transaction,
+  Wallet,
+  type TransactionReceipt,
+  type TransactionResponse,
+} from "ethers";
 import { readFileSync } from "fs";
 import path from "path";
 import "dotenv/config";
@@ -167,11 +176,12 @@ export type SwapArgs = {
   amountOutMinimum: bigint;
   deadline?: number | null;
   sqrtPriceLimitX96?: bigint;
+  gasLimit?: number;
+  gasPrice?: number;
 };
 
 export type SwapResult = {
-  txSwap: { hash: string; wait: () => Promise<{ status?: number }> };
-  receipt: { status?: number } | undefined;
+  txHash: string;
 };
 
 export class PoolManager {
@@ -329,6 +339,8 @@ export class PoolManager {
       amountOutMinimum,
       deadline = null,
       sqrtPriceLimitX96 = 0n,
+      gasLimit = 300_000,
+      gasPrice = undefined,
     } = args;
 
     const cfg = this.getPool(poolIndex);
@@ -410,21 +422,35 @@ export class PoolManager {
           amountOutMinimum,
           sqrtPriceLimitX96,
         };
-    this.log.log("Swapping...", params);
+    
+    const provider = wallet.provider;
+    if (!provider) {
+      throw new Error("Wallet has no provider; cannot broadcast swap");
+    }
+
+    const txData = await router.exactInputSingle.populateTransaction(params, {
+      gasLimit,
+      gasPrice,
+    });
+    
+    // Ensure chainId/nonce/fee fields are filled from the connected provider
+    const txToSign = await wallet.populateTransaction(txData);
+    const signedTx = await wallet.signTransaction(txToSign);
+    const parsed = Transaction.from(signedTx);
+    this.log.log("Swapping...", params, "swap tx:", parsed.hash);
     if (!DRY_RUN) {
       try {
-        const txSwap = await router.exactInputSingle(params, { gasLimit: 30_0000 });
-        console.log("swap tx:", txSwap.hash);
-        const receipt = await txSwap.wait();
-        console.log("status:", receipt?.status ?? "unknown");
-        return { txSwap, receipt };
+        provider.broadcastTransaction(signedTx);
+        console.log("sending tx to blockchain:", parsed.hash);
       } catch (error) {
         console.error("swap failed:", error);
         throw error;
       }
     }
-    return { txSwap: { hash: "0x0000000000000000000000000000000000000000000000000000000000000000", wait: async () => ({ status: 1 }) }, receipt: undefined };
-  }
+    return {
+      txHash: parsed.hash as string,
+    } as SwapResult;
+  } 
 
   async swapWithWallet(args: SwapArgs, walletIndex: number): Promise<SwapResult> {
     const wallet = this.walletRotator.pickWallet(walletIndex);

@@ -45,6 +45,16 @@ export function createApiRouter(log: Log, bot: BotContext): Router {
       next(e);
     }
   });
+  
+  router.post("/swap2", async (req, res, next) => {
+    try {
+      const { isBuy, amountInERC20, price, walletIdx, slippage, poolIndex} = req.body;
+      await bot.poolManager.swap2(isBuy, amountInERC20, price, walletIdx, slippage, poolIndex);
+      res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  });
 
   router.get("/anchor/latest", (_req, res) => {
     res.json({ ok: true, latest: bot.anchor.latest() });

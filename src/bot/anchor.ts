@@ -35,7 +35,6 @@ export class AnchorPrice {
       this.poolManager = poolManager;
       this.trackPriceIntervalSec = cfg.anchorUpdateSec;
       this.log = log;
-      this.trackPrice();
       console.log("Tracking price every", this.trackPriceIntervalSec, "seconds");
     }
 
@@ -43,7 +42,7 @@ export class AnchorPrice {
       this.samples.push(sample);
       this.prune(sample.t);
     }
-    private async trackPrice() {
+    async trackPrice() {
      
       while (true) {        
         const sample = await this.getSample();
