@@ -136,9 +136,10 @@ async function main() {
 
   const mode = (process.env.OBS_MODE ?? "read").toLowerCase();
   if (mode === "increase") {
+    // 7200 is too large for the current pool, too many gas cost.
     await increaseObservationCardinalityNextForPool({
       poolIndex,
-      targetObservationCardinalityNext,
+      targetObservationCardinalityNext: 500,
       privateKey,
     });
     return;

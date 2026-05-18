@@ -4,6 +4,8 @@ import path from "path";
 import "dotenv/config";
 import { Decimal } from "decimal.js";
 import type { Log } from "../logger.js";
+import { parseEther, parseUnits } from "ethers/utils";
+import { WalletRotator } from "./wallet-rotator.js";
 const DRY_RUN = process.env.DRY_RUN || false;
 
 // --- Types (match pool-config.json) ---
@@ -176,12 +178,15 @@ export class PoolManager {
   readonly pools: PoolConfigItem[];
   readonly log: Log;
   provider: JsonRpcProvider;
+  walletRotator: WalletRotator;
   constructor(pools: PoolConfigItem[], log: Log, provider: JsonRpcProvider) {
     this.pools = pools;
     this.log = log;
     this.provider = provider;
+    this.walletRotator = new WalletRotator(provider, 5);
   }
 
+  // we trust the config file, so we don't need to check the pool address
   static load(log: Log, provider: JsonRpcProvider, configPath?: string): PoolManager {
     const cfgPath =
       configPath ?? path.join(process.cwd(), "config", "pool-config.json");
@@ -335,8 +340,8 @@ export class PoolManager {
 
     const tokenInAddr = isBuy ? cfg.token1Info.address : cfg.token0Info.address;
     const tokenOutAddr = isBuy ? cfg.token0Info.address : cfg.token1Info.address;
-    const symIn = isBuy ? cfg.token1Info.symbol : cfg.token0Info.symbol;
-    const symOut = isBuy ? cfg.token0Info.symbol : cfg.token1Info.symbol;
+    const symbolIn = isBuy ? cfg.token1Info.symbol : cfg.token0Info.symbol;
+    const symbolOut = isBuy ? cfg.token0Info.symbol : cfg.token1Info.symbol;
 
     const tokenIn = new Contract(tokenInAddr, ERC20_ABI, wallet);
     const router = new Contract(
@@ -354,7 +359,7 @@ export class PoolManager {
       console.log("Dry run: Pool:", poolAddress);
       console.log("Dry run: SwapRouter:", swapRouterAddress);
       console.log("Trader:", wallet.address);
-      console.log("Dry run: Direction:", `${symIn} -> ${symOut}`, `(fee=${fee / 10_000}%)`);
+      console.log("Dry run: Direction:", `${symbolIn} -> ${symbolOut}`, `(fee=${fee / 10_000}%)`);
       console.log("Dry run: AmountIn (raw):", amountIn.toString());
       console.log("Dry run: AmountOutMinimum (raw):", amountOutMinimum.toString());
       console.log();
@@ -371,7 +376,7 @@ export class PoolManager {
         console.log("new weth balance:", newBal.toString());
       } else {
         throw new Error(
-          `Insufficient ${symIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
+          `Insufficient ${symbolIn} balance. Have=${Number(bal)/ 10 ** 18}, need=${Number(amountIn)/ 10 ** 18}.`,
         );
       }
     }
@@ -420,4 +425,49 @@ export class PoolManager {
     }
     return { txSwap: { hash: "0x0000000000000000000000000000000000000000000000000000000000000000", wait: async () => ({ status: 1 }) }, receipt: undefined };
   }
+
+  async swapWithWallet(args: SwapArgs, walletIndex: number): Promise<SwapResult> {
+    const wallet = this.walletRotator.pickWallet(walletIndex);
+    return this.swap(args, wallet);
+  }
+
+  async swap2(
+    isBuy: boolean, 
+    amountInERC20: number, 
+    price: number, 
+    walletIndex: number,
+    slippage: number,
+    poolIndex: number
+  ): Promise<SwapResult> {
+    const wallet = this.walletRotator.pickWallet(walletIndex);
+    const amountInEth = amountInERC20 / price;
+    const cfg = this.getPool(poolIndex);
+    const token0decimals = Number(cfg.token0Info.decimals);
+    const token1decimals = Number(cfg.token1Info.decimals);
+    if (isBuy) {
+      const amountIn = parseUnits(amountInEth.toFixed(token1decimals), token1decimals); // token 1
+      const outTokenFloat = amountInERC20 * (1 - slippage);
+      const outMin = parseUnits(outTokenFloat.toFixed(token0decimals), token0decimals); // token 0
+      return this.swap({
+        poolIndex,
+        isBuy,
+        amountIn,
+        amountOutMinimum: outMin
+      }, wallet);
+    } else {
+      const tokenInFloat = amountInERC20;
+      const tokenIn = parseUnits(tokenInFloat.toFixed(token0decimals), token0decimals); // token 0
+      const outEthMinFloat = amountInEth * (1 - slippage);
+      const outMin = parseUnits(outEthMinFloat.toFixed(token1decimals), token1decimals); // token 1
+
+      return this.swap({
+        poolIndex,
+        isBuy,
+        amountIn: tokenIn,
+        amountOutMinimum: outMin
+      }, wallet);
+    }
+    
+  }
+  
 }

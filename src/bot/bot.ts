@@ -73,7 +73,7 @@ export async function runBot(log: Log, ctx?: BotContext) {
     // update anchor (read price from pool via PoolManager.getPrice)
     const erc20EthPrice = await poolManager.getPrice(0);
     const currentTime = nowSec();
-    const price = await anchor.twap(currentTime);
+    const price = await anchor.twap(currentTime); // Token(0) amount per 1 wETH(1)
 
     const decision = strat.decide(
       { nowSec: currentTime, spotTokenPerEth: price, anchorTokenPerEth: price }
@@ -87,50 +87,13 @@ export async function runBot(log: Log, ctx?: BotContext) {
     const amountInERC20 = decision.amountERC20;
     const amountInEth = amountInERC20 / price;
 
-    // const deadline = nowSec() + 120;
     const isBuy = decision.side === "BUY";
-    if (isBuy) {
-      const amountIn = parseEther(amountInEth.toFixed(18));
-      // BUY: ETH -> TOKEN.
-      const outTokenFloat = amountInEth * price * (1 - decision.slippage);
-      // const tokenOut = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
-      const outMin = toUnitsFloat(outTokenFloat, 18);
-
-      log.log(
-        `[BUY] price=${price?.toFixed(6)} WETH amount=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
-          2
-        )}% min GMB=${outTokenFloat} delay=${decision.nextDelaySec}s wallet=${chosenWallet.address} `
-      );
-
-        await poolManager.swap({
-          poolIndex: 0,
-          isBuy,
-          amountIn,
-          amountOutMinimum: outMin
-        }, chosenWallet);
-
-    } else {
-      // SELL: TOKEN -> ETH.
-      const tokenInFloat = amountInEth * price;
-      // const tokenInInfo = isEthToken(erc20EthPrice.token0) ? erc20EthPrice.token1 : erc20EthPrice.token0;
-      const tokenIn = toUnitsFloat(tokenInFloat, 18);
-      const outEthMinFloat = amountInEth * (1 - decision.slippage);
-      const outMin = parseEther(outEthMinFloat.toFixed(18));
-
-      log.log(
-        `[SELL] price=${price.toFixed(6)} GMB Amount≈${tokenInFloat.toFixed(2)} min ETH=${outEthMinFloat.toFixed(
-          4
-        )} slip=${(decision.slippage * 100).toFixed(2)}% delay=${decision.nextDelaySec}s wallet=${chosenWallet.address} `
-      );
-
-      await poolManager.swap({
-        poolIndex: 0,
-        isBuy,
-        amountIn: tokenIn,
-          amountOutMinimum: outMin,
-        }, chosenWallet);
-
-    }
+    log.log(
+      `[SWAP2] price=${price?.toFixed(6)} WETH amount=${amountInEth.toFixed(6)} slip=${(decision.slippage * 100).toFixed(
+        2
+      )}% delay=${decision.nextDelaySec}s wallet=${chosenWallet.address} isBuy=${isBuy} amountInERC20=${amountInERC20} `
+    );
+    await poolManager.swap2(isBuy, amountInERC20, price, w.idx, decision.slippage, 0);
 
     if (DRY_RUN) {
       await sleep(1000);

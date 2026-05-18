@@ -5,6 +5,7 @@ import path from "path";
 export type WalletSlot = {
   wallet: Wallet;
   consecutiveTrades: number;
+  idx: number;
 };
 
 type GeneratedKeyEntry = {
@@ -12,7 +13,7 @@ type GeneratedKeyEntry = {
   address?: string;
 };
 
-function loadPrivateKeysFromGeneratedFile(): string[] {
+export function loadPrivateKeysFromGeneratedFile(): string[] {
   const filePath = path.join(process.cwd(), "config", "generated-keys.json");
   const raw = readFileSync(filePath, "utf8");
   const parsed = JSON.parse(raw) as unknown;
@@ -45,9 +46,10 @@ export class WalletRotator {
     if (maxConsecutive <= 0) throw new Error("WalletRotator: maxConsecutive must be > 0");
     this.provider = provider;
     this.maxConsecutive = maxConsecutive;
-    this.slots = privateKeys.map((pk) => ({
+    this.slots = privateKeys.map((pk, i) => ({
       wallet: new Wallet(pk, provider),
       consecutiveTrades: 0,
+      idx: i,
     }));
   }
 
@@ -60,6 +62,10 @@ export class WalletRotator {
     }
     const idx = Math.floor(Math.random() * candidates.length);
     return candidates[idx]!;
+  }
+
+  pickWallet(index: number): Wallet {
+    return this.slots[index]!.wallet;
   }
 
   markUsed(slot: WalletSlot) {
